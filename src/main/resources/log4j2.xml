@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+
+    <Properties>
+        <Property name="colors">{ERROR=red, WARN=yellow, INFO=green, DEBUG=black, TRACE=white}</Property>
+        <Property name="pattern">
+            %highlight{%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n}${colors}
+        </Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT" follow="true">
+            <PatternLayout pattern="${pattern}" disableAnsi="false"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="console" />
+        </Root>
+
+        <Logger name="com.immenser.parcelspacking" level="trace" additivity="false">
+            <AppenderRef ref="console" />
+        </Logger>
+    </Loggers>
+
+</Configuration>

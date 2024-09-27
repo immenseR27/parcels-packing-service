@@ -1,14 +1,18 @@
 package com.immenser.parcelspacking.entity;
 
-import com.immenser.parcelspacking.validation.ParcelSuitabilityValidator;
+import com.immenser.parcelspacking.entity.parcel.Parcel;
+import com.immenser.parcelspacking.entity.parcel.ParcelType;
+import com.immenser.parcelspacking.exception.ImpossiblePackingException;
+import com.immenser.parcelspacking.util.validation.SuitabilityValidator;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.util.*;
-import java.util.stream.IntStream;
 
 @Getter
 @Setter
+@EqualsAndHashCode
 public class Car {
 
     private final int width = 6;
@@ -16,17 +20,46 @@ public class Car {
 
     private Cell[][] body = new Cell[width][height];
     private int[] freeRowCellsCounters = new int[height];
+    private Map<ParcelType, Integer> parcelsTypeCounters;
+    private int usedCapacity;
 
-    {
+    public Car() {
         Arrays.fill(freeRowCellsCounters, width);
-        body = Arrays.stream(body)
-                .map(cells -> IntStream.range(0, cells.length)
-                        .mapToObj(j -> new Cell())
-                        .toArray(Cell[]::new))
-                .toArray(Cell[][]::new);
+        for (int i = height - 1; i >= 0; i--) {
+            for (int j = 0; j < width; j++) {
+                body[i][j] = new Cell(i, j);
+            }
+        }
+        parcelsTypeCounters = new TreeMap<>();
+        usedCapacity = 0;
     }
 
-    public int getFirstFreeCellInRow(int row) {
+    /**
+     * Метод последовательного заполнения тела машины посылками.
+     *
+     * @param parcels список посылок для погрузки.
+     */
+    public void fillBody(List<Parcel> parcels) {
+        int currRow = fillRow(getHeight() - 1, parcels);
+        while (currRow >= 0) {
+            currRow = fillRow(currRow, parcels);
+        }
+    }
+
+    private int fillRow(int row, List<Parcel> parcels) {
+        Iterator<Parcel> iterator = parcels.iterator();
+        while (iterator.hasNext()) {
+            Parcel parcel = iterator.next();
+            int firstFreeCell = getFirstFreeCellInRow(row);
+            if (SuitabilityValidator.isParcelSuitable(this, body[row][firstFreeCell], parcel)) {
+                putParcel(row, firstFreeCell, parcel);
+                iterator.remove();
+            }
+        }
+        return --row;
+    }
+
+    private int getFirstFreeCellInRow(int row) {
         int firstFreeCell = width - 1;
         for (int i = 0; i < width; i++) {
             if (body[row][i].isEmpty()) {
@@ -37,32 +70,42 @@ public class Car {
         return firstFreeCell;
     }
 
-    public void fillBody(List<Parcel> parcels) {
-        int currRow = fillRow(parcels, height - 1);
-        while (currRow >= 0) {
-            currRow = fillRow(parcels, currRow);
-        }
+    /**
+     * Метод упаковки посылки в машину, если она подходит по габаритам.
+     *
+     * @param parcel посылка, которую необходимо погрузить.
+     */
+    public void putParcelIfSuitable(Parcel parcel) throws ImpossiblePackingException {
+        Cell startCell = findBestSuitablePlace(parcel);
+        if (startCell != null) {
+            putParcel(startCell.row, startCell.column, parcel);
+        } else throw new ImpossiblePackingException("Невозможно распределить посылки равномерно.");
     }
 
-    private int fillRow(List<Parcel> parcels, int row) {
-        Iterator<Parcel> iterator = parcels.iterator();
-        while (iterator.hasNext()) {
-            Parcel parcel = iterator.next();
-            int firstFreeCell = getFirstFreeCellInRow(row);
-            if (ParcelSuitabilityValidator.isParcelSuitable(this, row, firstFreeCell, parcel)) {
-                putParcel(row, firstFreeCell, parcel);
-                iterator.remove();
+    private Cell findBestSuitablePlace(Parcel parcel) {
+        for (int i = height - 1; i >= 0; i--) {
+            int j = getFirstFreeCellInRow(i);
+            if (SuitabilityValidator.isParcelSuitable(this, body[i][j], parcel)) {
+                return body[i][j];
             }
         }
-        return --row;
+        return null;
     }
 
-    public void putParcel(int row, int firstFreeCell, Parcel parcel) {
+    private void putParcel(int row, int column, Parcel parcel) {
         for (int i = parcel.getHeight() - 1; i >= 0; i--) {
-            for (int j = firstFreeCell; j < firstFreeCell + parcel.getRowWidths().get(i); j++) {
-                body[row + i - parcel.getHeight() + 1][j].value = parcel.getValue();
+            for (int j = column; j < column + parcel.getType().getLayers().get(i).getWidth(); j++) {
+                body[row + i - parcel.getHeight() + 1][j].value = String.valueOf(parcel.getType().getValue());
                 freeRowCellsCounters[row + i - parcel.getHeight() + 1]--;
             }
+        }
+        increaseTypeCounter(parcel.getType());
+        usedCapacity += parcel.getType().getValue();
+    }
+
+    private void increaseTypeCounter(ParcelType type) {
+        if (!(parcelsTypeCounters.putIfAbsent(type, 1) == null)) {
+            parcelsTypeCounters.put(type, parcelsTypeCounters.get(type) + 1);
         }
     }
 
@@ -84,23 +127,16 @@ public class Car {
         return sj.toString();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Car car = (Car) o;
-        return Objects.deepEquals(body, car.body);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(width, height, Arrays.deepHashCode(body), Arrays.hashCode(freeRowCellsCounters));
-    }
-
-    public class Cell{
+    @Getter
+    @EqualsAndHashCode
+    public static class Cell {
+        private int row;
+        private int column;
         private String value;
 
-        public Cell(){
+        private Cell(int row, int column) {
+            this.row = row;
+            this.column = column;
             this.value = " ";
         }
 

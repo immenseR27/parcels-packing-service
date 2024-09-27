@@ -1,26 +1,47 @@
 package com.immenser.parcelspacking.service;
 
 import com.immenser.parcelspacking.entity.Car;
-import com.immenser.parcelspacking.entity.Parcel;
+import com.immenser.parcelspacking.output.PackingOutputter;
+import com.immenser.parcelspacking.reading.json.CarJsonReader;
+import com.immenser.parcelspacking.reading.json.JsonReader;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class CarService {
 
-    public static String distributeParcelsToCars(List<Parcel> parcels) {
-        List<Car> cars = new ArrayList<>();
-        while (!parcels.isEmpty()) {
-            Car car = new Car();
-            cars.add(car);
-            car.fillBody(parcels);
-        }
-        return getStringParcelsDistribution(cars);
+    private final PackingOutputter packingOutputter;
+
+    public CarService(PackingOutputter packingOutputter) {
+        this.packingOutputter = packingOutputter;
     }
 
-    private static String getStringParcelsDistribution(List<Car> cars) {
-        StringBuilder sb = new StringBuilder();
-        cars.forEach(sb::append);
-        return sb.toString();
+    /**
+     * Метод для создания списка пустых машин заданного размера.
+     *
+     * @param numOfCars размер списка.
+     * @return Список пустых машин.
+     */
+    public static List<Car> prepareEmptyCars(int numOfCars) {
+        return IntStream.range(0, numOfCars)
+                .mapToObj(i -> new Car())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Метод для вывода погрузки посылок в машине из json-файла.
+     *
+     * @param fileName имя json-файла.
+     */
+    public void showParcelsByCarFromJsonFile(String fileName) {
+        JsonReader<Car> jsonReader = new CarJsonReader(fileName);
+        Optional<Car> optionalCar = jsonReader.read();
+        optionalCar.ifPresent(car -> {
+                    packingOutputter.outputCarContentByTypes(car);
+                    packingOutputter.outputCarPacking(car);
+                }
+        );
     }
 }
